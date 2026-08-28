@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>KS Inter House 2026 - 5 Altar Slots AR Experience</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- MediaPipe Hands & Camera -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #000; touch-action: none; font-family: 'Inter', sans-serif; }
+        
+        #bg-container {
+            position: absolute; top: 0; left: 0; width: 100vw; height: 100vh;
+            background-image: url('https://lh3.googleusercontent.com/d/1bKwo9aPZAHycqFZk7XGBf2jUaTiOLBpM');
+            background-size: cover; background-position: center;
+            opacity: 0.25; z-index: 1; filter: brightness(0.7);
+        }
+
+        #video-element {
+            position: absolute; top: 0; left: 0; width: 100vw; height: 100vh;
+            object-fit: cover; z-index: 2; transform: scaleX(-1);
+            opacity: 0.45;
+        }
+
+        #game-canvas {
+            position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 10;
+        }
+
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            box-shadow: 0 10px 30px 0 rgba(0, 0, 0, 0.5);
+        }
+
+        #loading-screen {
+            position: absolute; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: radial-gradient(circle at center, #0f172a 0%, #020617 100%);
+            z-index: 50; display: flex; flex-direction: column;
+            justify-content: center; align-items: center; color: white;
+            transition: opacity 0.6s ease;
+        }
+
+        .spinner {
+            width: 60px; height: 60px;
+            border: 6px solid rgba(255,255,255,0.1);
+            border-radius: 50%;
+            border-top-color: #06b6d4;
+            animation: spin 1s cubic-bezier(0.68, -0.55, 0.27, 1.55) infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <div id="bg-container"></div>
+    <video id="video-element" autoplay playsinline></video>
+    <canvas id="game-canvas"></canvas>
+
+    <!-- Loading Screen -->
+    <div id="loading-screen">
+        <div class="spinner mb-6"></div>
+        <h1 class="text-3xl font-extrabold tracking-widest text-cyan-400 mb-2 drop-shadow-lg">KS INTER HOUSE 2026</h1>
+        <p class="text-slate-300 text-sm tracking-wide" id="load-text">กำลังเตรียมระบบ 5 สัตว์ในตำนานแห่ง KS INTER HOUSE 2026... 0%</p>
+        <p class="text-slate-500 text-xs mt-4">กรุณาอนุญาตการใช้งานกล้องเพื่อเริ่มเล่นเกม</p>
+    </div>
+
+    <!-- Hand Tracking Status Alert -->
+    <div id="tracking-alert" class="absolute top-4 right-4 z-20 glass-panel px-4 py-2.5 rounded-2xl flex items-center gap-3 transition-all duration-300">
+        <div id="tracking-dot" class="w-3.5 h-3.5 rounded-full bg-rose-500 animate-ping"></div>
+        <div>
+            <p id="tracking-text" class="text-white text-xs font-semibold tracking-wide">กำลังหามือ...</p>
+            <p class="text-slate-400 text-[10px]">ชูมือหน้ากล้องเพื่อควบคุมแบบ AR</p>
+        </div>
+    </div>
+
+    <!-- AI Companion Chat Widget -->
+    <div class="absolute bottom-6 left-6 z-20 flex flex-col items-start gap-2">
+        <div id="ai-chat-box" class="glass-panel hidden w-72 p-4 rounded-2xl text-white text-xs shadow-2xl border-cyan-500/40">
+            <div class="flex justify-between items-center mb-2 border-b border-white/10 pb-1">
+                <span class="font-bold text-cyan-400 flex items-center gap-1">🤖 KS AI Assistant</span>
+                <button onclick="toggleAIChat()" class="text-slate-400 hover:text-white">&times;</button>
+            </div>
+            <p id="ai-response-text" class="text-slate-200 leading-relaxed">ลากสัตว์วิเศษทั้ง 5 ตัวมาใส่ใน 5 แท่นบูชาด้านล่างเพื่อปลุกพลังแห่งชัยชนะ!</p>
+        </div>
+        <button onclick="toggleAIChat()" class="glass-panel px-4 py-2.5 rounded-2xl flex items-center gap-2 text-white text-xs font-bold hover:bg-cyan-500/25 transition-all border-cyan-500/50 shadow-lg">
+            <span>💬 ผู้ช่วย AI</span>
+        </button>
+    </div>
+
+    <script>
+        const TOTAL_BEASTS = 5;
+        const ASSET_URLS = {
+            beast1: 'https://lh3.googleusercontent.com/d/1t1L0HsGuzDpptbt0KLl0F1n3NZKHmHDp',
+            beast2: 'https://lh3.googleusercontent.com/d/19oDYhYolaE8nfEQEnPQblA_cBfCgr8Lh',
+            beast3: 'https://lh3.googleusercontent.com/d/17kEPVgGACbcv_ie_ISw653nR1cZE5y0l',
+            beast4: 'https://lh3.googleusercontent.com/d/14Mv6d7PzYSeI8qYykaCjJ1cqlG4WA7MP',
+            beast5: 'https://lh3.googleusercontent.com/d/1Fu-aw3UljVrmXB7JMhx7LnB1hSlaF_WW',
+            victoryImg: 'https://lh3.googleusercontent.com/d/1SfbKCxORYpMlq9P83hrwg1MHxtPwU0-i'
+        };
+
+        const canvas = document.getElementById('game-canvas');
+        const ctx = canvas.getContext('2d');
+        const videoElement = document.getElementById('video-element');
+        let vw = window.innerWidth;
+        let vh = window.innerHeight;
+        let loadedImages = {};
+        let imagesLoaded = 0;
+        
+        let gameState = 'loading'; // loading, playing, victory
+        let camera = null;
+        let hands = null;
+        let lastTime = 0;
+
+        let altars = []; // 5 altar slots
+        let beasts = [];
+        let particles = [];
+        let score = 0;
+        let draggedBeast = null;
+        
+        let cursor = { x: -100, y: -100, isPinching: false, isHovering: false, hasTarget: false };
+        let isHandDetected = false;
+        let latestHandLandmarks = null;
+
+        let victoryObj = {
+            active: false,
+            x: vw / 2, y: vh, targetY: vh / 2,
+            scale: 0.1, maxScale: 1.6, opacity: 0
+        };
+
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        const audioCtx = new AudioContext();
+        
+        function playChime(volume = 0.4) {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(523.25, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(1046.50, audioCtx.currentTime + 0.15);
+            gain.gain.setValueAtTime(volume, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.6);
+            osc.connect(gain); gain.connect(audioCtx.destination);
+            osc.start(); osc.stop(audioCtx.currentTime + 0.6);
+        }
+
+        // Play loud triple explosion chime effect when 5 beasts are collected
+        function playLoudTripleExplosion() {
+            playChime(1.0);
+            createExplosion(vw / 2, vh / 2, 80, ['#FFFFFF', '#FFD700', '#FF4500']);
+            setTimeout(() => {
+                playChime(1.2);
+                createExplosion(vw / 2 - 100, vh / 2 - 50, 80, ['#00FFFF', '#FF1493', '#FFA500']);
+            }, 300);
+            setTimeout(() => {
+                playChime(1.5);
+                createExplosion(vw / 2 + 100, vh / 2 + 50, 100, ['#32CD32', '#FF4500', '#FFFF00']);
+            }, 600);
+        }
+
+        function toggleAIChat() {
+            const box = document.getElementById('ai-chat-box');
+            box.classList.toggle('hidden');
+        }
+
+        class Beast {
+            constructor(id, imgKey) {
+                this.id = id;
+                this.imgKey = imgKey;
+                this.size = Math.min(vw, vh) * 0.14;
+                if(this.size < 80) this.size = 80;
+                if(this.size > 125) this.size = 125;
+                
+                this.x = vw / 2 + (Math.random() - 0.5) * (vw * 0.5);
+                this.y = vh / 2 + (Math.random() - 0.5) * (vh * 0.35) - (vh * 0.1);
+                
+                this.baseX = this.x;
+                this.baseY = this.y;
+                
+                this.vx = ((Math.random() - 0.5) * 2) * 0.15;
+                this.vy = ((Math.random() - 0.5) * 2) * 0.15;
+                this.timeOffX = Math.random() * 1000;
+                this.timeOffY = Math.random() * 1000;
+                this.floatSpeed = 0.001 + Math.random() * 0.001;
+                this.ampX = 40 + Math.random() * 40;
+                this.ampY = 25 + Math.random() * 25;
+
+                this.isDragged = false;
+                this.isCaptured = false;
+                this.opacity = 1;
+                this.scale = 1;
+            }
+
+            update(dt, time) {
+                if (this.isCaptured) return;
+                
+                if (!this.isDragged) {
+                    this.baseX += this.vx * dt;
+                    this.baseY += this.vy * dt;
+
+                    const marginX = vw * 0.15;
+                    const marginTop = vh * 0.15;
+                    const marginBottom = vh * 0.35;
+
+                    if (this.baseX < marginX) { this.baseX = marginX; this.vx *= -1; }
+                    if (this.baseX > vw - marginX) { this.baseX = vw - marginX; this.vx *= -1; }
+                    if (this.baseY < marginTop) { this.baseY = marginTop; this.vy *= -1; }
+                    if (this.baseY > vh - marginBottom) { this.baseY = vh - marginBottom; this.vy *= -1; }
+
+                    this.x = this.baseX + Math.sin(time * this.floatSpeed + this.timeOffX) * this.ampX;
+                    this.y = this.baseY + Math.cos(time * this.floatSpeed + this.timeOffY) * this.ampY;
+                } else {
+                    this.x += (cursor.x - this.x) * 0.25;
+                    this.y += (cursor.y - this.y) * 0.25;
+                }
+            }
+
+            draw(ctx, time = 0) {
+                if (!loadedImages[this.imgKey] || this.opacity <= 0) return;
+
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                
+                const sway = this.isDragged ? (this.x - cursor.x) * 0.04 : this.vx * 0.2;
+                const tiltX = this.isDragged ? 0 : this.vx * 0.3; 
+                const tiltY = this.isDragged ? 0 : this.vy * 0.3;
+                const zDepth = this.isDragged ? 1.25 : 1 + Math.sin(time * this.floatSpeed * 2.5) * 0.15; 
+                
+                ctx.transform(1, tiltY, tiltX, 1, 0, 0);
+                ctx.rotate(sway);
+                ctx.scale(this.scale * zDepth, this.scale * zDepth);
+                ctx.globalAlpha = this.opacity;
+                
+                ctx.shadowColor = 'rgba(0, 0, 0, 0.75)';
+                ctx.shadowBlur = 35 * zDepth;
+                ctx.shadowOffsetY = 18 * zDepth;
+                ctx.shadowOffsetX = 10 * zDepth;
+                
+                if (this.isDragged) {
+                    ctx.shadowColor = 'rgba(52, 211, 153, 0.95)';
+                    ctx.shadowBlur = 45;
+                }
+
+                ctx.drawImage(loadedImages[this.imgKey], -this.size/2, -this.size/2, this.size, this.size);
+                ctx.restore();
+            }
+
+            contains(x, y) {
+                const dx = this.x - x;
+                const dy = this.y - y;
+                return Math.sqrt(dx*dx + dy*dy) < (this.size * 0.55);
+            }
+        }
+
+        class Particle {
+            constructor(x, y, color) {
+                this.x = x; this.y = y;
+                this.vx = (Math.random() - 0.5) * 12;
+                this.vy = (Math.random() - 0.5) * 12 - 3;
+                this.life = 1.0;
+                this.decay = 0.01 + Math.random() * 0.015;
+                this.color = color;
+                this.size = Math.random() * 6 + 3;
+            }
+            update() {
+                this.x += this.vx;
+                this.y += this.vy;
+                this.vy += 0.12;
+                this.life -= this.decay;
+            }
+            draw(ctx) {
+                ctx.globalAlpha = Math.max(0, this.life);
+                ctx.fillStyle = this.color;
+                ctx.shadowColor = this.color;
+                ctx.shadowBlur = 12;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.globalAlpha = 1;
+            }
+        }
+
+        function resizeCanvas() {
+            vw = window.innerWidth;
+            vh = window.innerHeight;
+            canvas.width = vw;
+            canvas.height = vh;
+            
+            altars = [];
+            const totalSlots = 5;
+            const slotW = Math.min(85, vw * 0.16);
+            const slotH = slotW;
+            const gap = 14;
+            const totalWidth = (totalSlots * slotW) + ((totalSlots - 1) * gap);
+            const startX = (vw - totalWidth) / 2;
+            const startY = vh - slotH - 35;
+
+            for(let i=0; i<totalSlots; i++) {
+                altars.push({
+                    id: i + 1,
+                    x: startX + i * (slotW + gap),
+                    y: startY,
+                    w: slotW,
+                    h: slotH,
+                    filled: false,
+                    beastKey: null
+                });
+            }
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        function createExplosion(x, y, count, colors = ['#06B6D4', '#3B82F6', '#F59E0B', '#34D399', '#FFFFFF']) {
+            for(let i=0; i<count; i++) {
+                particles.push(new Particle(x, y, colors[Math.floor(Math.random() * colors.length)]));
+            }
+        }
+
+        function removeImageBackground(img) {
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = img.width;
+            tempCanvas.height = img.height;
+            const tCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
+            tCtx.drawImage(img, 0, 0);
+            
+            try {
+                const imageData = tCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+                const data = imageData.data;
+                if (data[3] === 0) return tempCanvas;
+
+                const bgR = data[0], bgG = data[1], bgB = data[2];
+                const tolerance = 50;
+
+                for (let i = 0; i < data.length; i += 4) {
+                    if (Math.abs(data[i] - bgR) < tolerance && 
+                        Math.abs(data[i+1] - bgG) < tolerance && 
+                        Math.abs(data[i+2] - bgB) < tolerance) {
+                        data[i+3] = 0; 
+                    }
+                }
+                tCtx.putImageData(imageData, 0, 0);
+                return tempCanvas;
+            } catch (e) {
+                console.warn("CORS background removal notice:", e);
+                return img;
+            }
+        }
+
+        function preloadAssets() {
+            const keys = Object.keys(ASSET_URLS);
+            const loadText = document.getElementById('load-text');
+            
+            keys.forEach(key => {
+                const img = new Image();
+                img.crossOrigin = "anonymous";
+                img.onload = () => {
+                    loadedImages[key] = removeImageBackground(img);
+                    imagesLoaded++;
+                    loadText.innerText = `กำลังเตรียมระบบ 5 สัตว์ในตำนานแห่ง KS INTER HOUSE 2026... ${Math.floor((imagesLoaded/keys.length)*100)}%`;
+                    
+                    if (imagesLoaded === keys.length) {
+                        setTimeout(() => {
+                            const loadingScreen = document.getElementById('loading-screen');
+                            loadingScreen.style.opacity = '0';
+                            setTimeout(() => loadingScreen.style.display = 'none', 600);
+                            
+                            initGame();
+                            initMediaPipe();
+                            gameState = 'playing';
+                            requestAnimationFrame(drawLoop);
+                        }, 400);
+                    }
+                };
+                img.onerror = () => {
+                    console.error(`Asset load error: ${key}`);
+                    imagesLoaded++;
+                };
+                img.src = ASSET_URLS[key];
+            });
+        }
+
+        function initGame() {
+            beasts = [];
+            particles = [];
+            score = 0;
+            draggedBeast = null;
+            victoryObj.active = false;
+            
+            altars.forEach(slot => {
+                slot.filled = false;
+                slot.beastKey = null;
+            });
+
+            for (let i = 1; i <= TOTAL_BEASTS; i++) {
+                beasts.push(new Beast(i, `beast${i}`));
+            }
+        }
+
+        function checkInteractions() {
+            cursor.isHovering = false;
+            cursor.hasTarget = draggedBeast !== null;
+
+            if (draggedBeast) {
+                if (!cursor.isPinching) {
+                    let targetSlot = null;
+                    for (let slot of altars) {
+                        if (!slot.filled && 
+                            cursor.x > slot.x && cursor.x < slot.x + slot.w &&
+                            cursor.y > slot.y && cursor.y < slot.y + slot.h) {
+                            targetSlot = slot;
+                            break;
+                        }
+                    }
+
+                    if (targetSlot) {
+                        targetSlot.filled = true;
+                        targetSlot.beastKey = draggedBeast.imgKey;
+                        draggedBeast.isCaptured = true;
+                        draggedBeast.x = targetSlot.x + targetSlot.w / 2;
+                        draggedBeast.y = targetSlot.y + targetSlot.h / 2;
+                        
+                        createExplosion(cursor.x, cursor.y, 50);
+                        score++;
+                        
+                        if(score >= TOTAL_BEASTS) {
+                            playLoudTripleExplosion();
+                            triggerVictory();
+                        } else {
+                            playChime(0.5);
+                        }
+                    } else {
+                        draggedBeast.baseX = cursor.x;
+                        draggedBeast.baseY = cursor.y;
+                    }
+                    draggedBeast.isDragged = false;
+                    draggedBeast = null;
+                }
+            } else {
+                for (let i = beasts.length - 1; i >= 0; i--) {
+                    let b = beasts[i];
+                    if (!b.isCaptured && b.contains(cursor.x, cursor.y)) {
+                        cursor.isHovering = true;
+                        if (cursor.isPinching) {
+                            b.isDragged = true;
+                            draggedBeast = b;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        function triggerVictory() {
+            gameState = 'victory';
+            victoryObj.active = true;
+            victoryObj.y = vh / 2 - 40;
+            victoryObj.x = vw / 2;
+            victoryObj.scale = 0.1;
+            victoryObj.opacity = 0;
+        }
+
+        function initMediaPipe() {
+            hands = new Hands({
+                locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+            });
+            
+            hands.setOptions({
+                maxNumHands: 1,
+                modelComplexity: 1,
+                minDetectionConfidence: 0.65,
+                minTrackingConfidence: 0.65
+            });
+
+            hands.onResults((results) => {
+                const trackingDot = document.getElementById('tracking-dot');
+                const trackingText = document.getElementById('tracking-text');
+
+                if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                    isHandDetected = true;
+                    latestHandLandmarks = results.multiHandLandmarks[0];
+                    
+                    trackingDot.classList.replace('bg-rose-500', 'bg-emerald-500');
+                    trackingDot.classList.remove('animate-ping');
+                    trackingText.innerText = 'เชื่อมต่อมือสำเร็จ (Hand AR Active)';
+
+                    const indexTip = latestHandLandmarks[8];
+                    const thumbTip = latestHandLandmarks[4];
+
+                    cursor.x = (1 - indexTip.x) * vw;
+                    cursor.y = indexTip.y * vh;
+
+                    const pThumbX = (1 - thumbTip.x) * vw;
+                    const pThumbY = thumbTip.y * vh;
+                    const dx = cursor.x - pThumbX;
+                    const dy = cursor.y - pThumbY;
+                    const dist = Math.sqrt(dx*dx + dy*dy);
+
+                    cursor.isPinching = dist < 45;
+                } else {
+                    isHandDetected = false;
+                    latestHandLandmarks = null;
+                    if(!draggedBeast) cursor.isPinching = false;
+                    
+                    trackingDot.classList.replace('bg-emerald-500', 'bg-rose-500');
+                    trackingDot.classList.add('animate-ping');
+                    trackingText.innerText = 'กำลังหามือ (ใช้เมาส์/นิ้วแตะแทนได้)';
+                }
+            });
+
+            camera = new Camera(videoElement, {
+                onFrame: async () => {
+                    await hands.send({image: videoElement});
+                },
+                width: 640,
+                height: 480
+            });
+            camera.start().catch(err => {
+                console.warn("Camera start warning/fallback:", err);
+            });
+        }
+
+        function handlePointerMove(e) {
+            if(isHandDetected) return;
+            let clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            let clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            cursor.x = clientX;
+            cursor.y = clientY;
+        }
+        function handlePointerDown(e) {
+            if(isHandDetected) return;
+            handlePointerMove(e);
+            cursor.isPinching = true;
+        }
+        function handlePointerUp(e) {
+            if(isHandDetected) return;
+            cursor.isPinching = false;
+        }
+
+        window.addEventListener('mousemove', handlePointerMove);
+        window.addEventListener('mousedown', handlePointerDown);
+        window.addEventListener('mouseup', handlePointerUp);
+        window.addEventListener('touchmove', handlePointerMove, {passive: false});
+        window.addEventListener('touchstart', handlePointerDown, {passive: false});
+        window.addEventListener('touchend', handlePointerUp);
+
+        function drawAltars(time) {
+            altars.forEach((slot, index) => {
+                ctx.save();
+                ctx.fillStyle = slot.filled ? 'rgba(16, 185, 129, 0.3)' : 'rgba(15, 23, 42, 0.85)';
+                ctx.strokeStyle = slot.filled ? '#34D399' : `rgba(6, 182, 212, ${0.5 + Math.sin(time*0.006 + index)*0.3})`;
+                ctx.lineWidth = 3.5;
+                
+                ctx.shadowColor = slot.filled ? 'rgba(52, 211, 153, 0.7)' : 'rgba(6, 182, 212, 0.6)';
+                ctx.shadowBlur = 20;
+                
+                ctx.beginPath();
+                ctx.roundRect(slot.x, slot.y, slot.w, slot.h, 18);
+                ctx.fill();
+                ctx.stroke();
+
+                if (slot.filled && slot.beastKey && loadedImages[slot.beastKey]) {
+                    const beastImg = loadedImages[slot.beastKey];
+                    const pad = 8;
+                    ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+                    ctx.shadowBlur = 15;
+                    ctx.drawImage(beastImg, slot.x + pad, slot.y + pad, slot.w - (pad*2), slot.h - (pad*2));
+                } else {
+                    ctx.fillStyle = '#93C5FD';
+                    ctx.shadowBlur = 4;
+                    ctx.shadowColor = 'rgba(0,0,0,0.8)';
+                    ctx.font = 'bold 18px Inter';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(`${slot.id}`, slot.x + slot.w/2, slot.y + slot.h/2);
+                }
+                ctx.restore();
+            });
+
+            // Banner above altars
+            ctx.save();
+            ctx.font = 'bold 16px Inter';
+            ctx.fillStyle = '#FFFFFF';
+            ctx.textAlign = 'center';
+            ctx.shadowColor = 'rgba(0,0,0,0.9)';
+            ctx.shadowBlur = 6;
+            ctx.fillText(`✨ 5 สัตว์ในตำนานแห่ง KS INTER HOUSE 2026 (${score}/${TOTAL_BEASTS}) ✨`, vw / 2, altars[0].y - 18);
+            ctx.restore();
+        }
+
+        function drawCursor(time) {
+            ctx.save();
+            ctx.lineWidth = 3;
+            
+            if (draggedBeast) {
+                ctx.strokeStyle = '#22C55E';
+                ctx.fillStyle = 'rgba(34, 197, 94, 0.25)';
+                ctx.shadowColor = '#22C55E';
+                ctx.shadowBlur = 18;
+                ctx.beginPath(); ctx.arc(cursor.x, cursor.y, 28, 0, Math.PI*2);
+                ctx.fill(); ctx.stroke();
+                
+                ctx.fillStyle = '#fff'; ctx.font = '18px Arial'; ctx.textAlign='center'; ctx.textBaseline='middle';
+                ctx.fillText('🎯', cursor.x, cursor.y);
+            } else if (cursor.isHovering) {
+                ctx.strokeStyle = '#F59E0B';
+                ctx.setLineDash([6, 6]);
+                const pulse = 26 + Math.sin(time * 0.012) * 6;
+                ctx.beginPath(); ctx.arc(cursor.x, cursor.y, pulse, 0, Math.PI*2);
+                ctx.stroke();
+            } else if (cursor.isPinching) {
+                ctx.strokeStyle = '#EF4444';
+                ctx.fillStyle = 'rgba(239, 68, 68, 0.3)';
+                ctx.beginPath(); ctx.arc(cursor.x, cursor.y, 22, 0, Math.PI*2);
+                ctx.fill(); ctx.stroke();
+            } else {
+                ctx.strokeStyle = '#06B6D4';
+                ctx.fillStyle = 'rgba(6, 182, 212, 0.15)';
+                ctx.beginPath(); ctx.arc(cursor.x, cursor.y, 16, 0, Math.PI*2);
+                ctx.fill(); ctx.stroke();
+            }
+            ctx.restore();
+        }
+
+        function drawHandLandmarks() {
+            if (!isHandDetected || !latestHandLandmarks) return;
+            ctx.save();
+            const connections = HAND_CONNECTIONS;
+            ctx.strokeStyle = 'rgba(6, 182, 212, 0.45)';
+            ctx.lineWidth = 2.5;
+            for (let i = 0; i < connections.length; i++) {
+                const [p1, p2] = connections[i];
+                const pt1 = latestHandLandmarks[p1];
+                const pt2 = latestHandLandmarks[p2];
+                ctx.beginPath();
+                ctx.moveTo((1 - pt1.x) * vw, pt1.y * vh);
+                ctx.lineTo((1 - pt2.x) * vw, pt2.y * vh);
+                ctx.stroke();
+            }
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+            for (let i = 0; i < latestHandLandmarks.length; i++) {
+                const pt = latestHandLandmarks[i];
+                ctx.beginPath();
+                ctx.arc((1 - pt.x) * vw, pt.y * vh, 3.5, 0, 2 * Math.PI);
+                ctx.fill();
+            }
+            ctx.restore();
+        }
+
+        function drawLoop(timestamp) {
+            if (!lastTime) lastTime = timestamp;
+            const dt = Math.min(timestamp - lastTime, 50);
+            lastTime = timestamp;
+
+            ctx.clearRect(0, 0, vw, vh);
+
+            if (gameState === 'playing' || gameState === 'victory') {
+                checkInteractions();
+                
+                drawAltars(timestamp);
+
+                beasts.forEach(b => {
+                    b.update(dt, timestamp);
+                    b.draw(ctx, timestamp);
+                });
+
+                if (victoryObj.active && loadedImages.victoryImg) {
+                    victoryObj.y += (victoryObj.targetY - victoryObj.y) * 0.03;
+                    victoryObj.scale += (victoryObj.maxScale - victoryObj.scale) * 0.03;
+                    if (victoryObj.opacity < 1) victoryObj.opacity += 0.02;
+                    
+                    ctx.save();
+                    ctx.translate(victoryObj.x, victoryObj.y + Math.sin(timestamp*0.0035)*22);
+                    ctx.globalAlpha = victoryObj.opacity;
+                    ctx.scale(victoryObj.scale, victoryObj.scale);
+                    ctx.shadowColor = 'rgba(245, 158, 11, 0.95)';
+                    ctx.shadowBlur = 70;
+                    ctx.shadowOffsetY = 20;
+                    ctx.drawImage(loadedImages.victoryImg, -140, -140, 280, 280);
+                    ctx.restore();
+                    
+                    if(Math.random() < 0.15) {
+                        createExplosion(Math.random()*vw, Math.random()*(vh*0.7), 25, ['#10B981', '#EF4444', '#F59E0B', '#3B82F6', '#EC4899', '#FFFFFF']);
+                    }
+                }
+
+                for (let i = particles.length - 1; i >= 0; i--) {
+                    let p = particles[i];
+                    p.update();
+                    p.draw(ctx);
+                    if (p.life <= 0) particles.splice(i, 1);
+                }
+
+                if (isHandDetected) drawHandLandmarks();
+                if (cursor.x > -50 && cursor.y > -50) drawCursor(timestamp);
+            }
+
+            requestAnimationFrame(drawLoop);
+        }
+
+        window.onload = preloadAssets;
+    </script>
+</body>
+</html>
