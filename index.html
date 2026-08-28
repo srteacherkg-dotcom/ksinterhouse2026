@@ -88,7 +88,7 @@
                 <span class="font-bold text-cyan-400 flex items-center gap-1">🤖 KS AI Assistant</span>
                 <button onclick="toggleAIChat()" class="text-slate-400 hover:text-white">&times;</button>
             </div>
-            <p id="ai-response-text" class="text-slate-200 leading-relaxed">ลากสัตว์วิเศษทั้ง 5 ตัวมาใส่ใน 5 แท่นบูชาด้านล่างเพื่อปลุกพลังแห่งชัยชนะ!</p>
+            <p id="ai-response-text" class="text-slate-200 leading-relaxed">ลากสัตว์วิเศษทั้ง 5 ตัวที่เรียงอยู่กลางจอมาใส่ใน 5 แท่นบูชาด้านล่างเพื่อปลุกพลังแห่งชัยชนะ!</p>
         </div>
         <button onclick="toggleAIChat()" class="glass-panel px-4 py-2.5 rounded-2xl flex items-center gap-2 text-white text-xs font-bold hover:bg-cyan-500/25 transition-all border-cyan-500/50 shadow-lg">
             <span>💬 ผู้ช่วย AI</span>
@@ -151,14 +151,16 @@
             osc.start(); osc.stop(audioCtx.currentTime + 0.6);
         }
 
-        // Play loud triple explosion chime effect when 5 beasts are collected
+        // Play loud triple explosion sound effect when 5 beasts are collected
         function playLoudTripleExplosion() {
             playChime(1.0);
             createExplosion(vw / 2, vh / 2, 80, ['#FFFFFF', '#FFD700', '#FF4500']);
+            
             setTimeout(() => {
                 playChime(1.2);
                 createExplosion(vw / 2 - 100, vh / 2 - 50, 80, ['#00FFFF', '#FF1493', '#FFA500']);
             }, 300);
+
             setTimeout(() => {
                 playChime(1.5);
                 createExplosion(vw / 2 + 100, vh / 2 + 50, 100, ['#32CD32', '#FF4500', '#FFFF00']);
@@ -171,26 +173,20 @@
         }
 
         class Beast {
-            constructor(id, imgKey) {
+            constructor(id, imgKey, initialX, initialY) {
                 this.id = id;
                 this.imgKey = imgKey;
-                this.size = Math.min(vw, vh) * 0.14;
-                if(this.size < 80) this.size = 80;
-                if(this.size > 125) this.size = 125;
+                // Increased size by 40% (1.4x factor)
+                let baseSize = Math.min(vw, vh) * 0.14;
+                if(baseSize < 80) baseSize = 80;
+                if(baseSize > 125) baseSize = 125;
+                this.size = baseSize * 1.4; 
                 
-                this.x = vw / 2 + (Math.random() - 0.5) * (vw * 0.5);
-                this.y = vh / 2 + (Math.random() - 0.5) * (vh * 0.35) - (vh * 0.1);
+                this.x = initialX;
+                this.y = initialY;
                 
                 this.baseX = this.x;
                 this.baseY = this.y;
-                
-                this.vx = ((Math.random() - 0.5) * 2) * 0.15;
-                this.vy = ((Math.random() - 0.5) * 2) * 0.15;
-                this.timeOffX = Math.random() * 1000;
-                this.timeOffY = Math.random() * 1000;
-                this.floatSpeed = 0.001 + Math.random() * 0.001;
-                this.ampX = 40 + Math.random() * 40;
-                this.ampY = 25 + Math.random() * 25;
 
                 this.isDragged = false;
                 this.isCaptured = false;
@@ -201,24 +197,13 @@
             update(dt, time) {
                 if (this.isCaptured) return;
                 
-                if (!this.isDragged) {
-                    this.baseX += this.vx * dt;
-                    this.baseY += this.vy * dt;
-
-                    const marginX = vw * 0.15;
-                    const marginTop = vh * 0.15;
-                    const marginBottom = vh * 0.35;
-
-                    if (this.baseX < marginX) { this.baseX = marginX; this.vx *= -1; }
-                    if (this.baseX > vw - marginX) { this.baseX = vw - marginX; this.vx *= -1; }
-                    if (this.baseY < marginTop) { this.baseY = marginTop; this.vy *= -1; }
-                    if (this.baseY > vh - marginBottom) { this.baseY = vh - marginBottom; this.vy *= -1; }
-
-                    this.x = this.baseX + Math.sin(time * this.floatSpeed + this.timeOffX) * this.ampX;
-                    this.y = this.baseY + Math.cos(time * this.floatSpeed + this.timeOffY) * this.ampY;
-                } else {
+                if (this.isDragged) {
                     this.x += (cursor.x - this.x) * 0.25;
                     this.y += (cursor.y - this.y) * 0.25;
+                } else {
+                    // Static in place (no automatic movement)
+                    this.x = this.baseX;
+                    this.y = this.baseY;
                 }
             }
 
@@ -228,13 +213,8 @@
                 ctx.save();
                 ctx.translate(this.x, this.y);
                 
-                const sway = this.isDragged ? (this.x - cursor.x) * 0.04 : this.vx * 0.2;
-                const tiltX = this.isDragged ? 0 : this.vx * 0.3; 
-                const tiltY = this.isDragged ? 0 : this.vy * 0.3;
-                const zDepth = this.isDragged ? 1.25 : 1 + Math.sin(time * this.floatSpeed * 2.5) * 0.15; 
+                const zDepth = this.isDragged ? 1.25 : 1 + Math.sin(time * 0.003) * 0.05; 
                 
-                ctx.transform(1, tiltY, tiltX, 1, 0, 0);
-                ctx.rotate(sway);
                 ctx.scale(this.scale * zDepth, this.scale * zDepth);
                 ctx.globalAlpha = this.opacity;
                 
@@ -398,8 +378,15 @@
                 slot.beastKey = null;
             });
 
-            for (let i = 1; i <= TOTAL_BEASTS; i++) {
-                beasts.push(new Beast(i, `beast${i}`));
+            // Arrange 5 beasts in a horizontal row across the center of the screen, static (no movement)
+            const totalBeasts = TOTAL_BEASTS;
+            const spacing = vw / (totalBeasts + 1);
+            const centerY = vh * 0.42;
+
+            for (let i = 1; i <= totalBeasts; i++) {
+                const initialX = spacing * i;
+                const initialY = centerY;
+                beasts.push(new Beast(i, `beast${i}`, initialX, initialY));
             }
         }
 
@@ -436,8 +423,8 @@
                             playChime(0.5);
                         }
                     } else {
-                        draggedBeast.baseX = cursor.x;
-                        draggedBeast.baseY = cursor.y;
+                        draggedBeast.baseX = draggedBeast.x;
+                        draggedBeast.baseY = draggedBeast.y;
                     }
                     draggedBeast.isDragged = false;
                     draggedBeast = null;
