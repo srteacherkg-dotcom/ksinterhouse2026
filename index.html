@@ -13,13 +13,18 @@
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
 
-    <style>
+<style>
         body { margin: 0; overflow: hidden; background-color: #000; touch-action: none; font-family: 'Inter', sans-serif; }
         
         #bg-container {
-            position: absolute; top: 0; left: 0; width: 100vw; height: 100vh;
+            position: fixed;
+            top: 0; left: 0;
+            width: 100vw; height: 100vh;
+            width: 100dvw; height: 100dvh;
             background-image: url('https://lh3.googleusercontent.com/d/1bKwo9aPZAHycqFZk7XGBf2jUaTiOLBpM');
-            background-size: cover; background-position: center;
+            background-size: 100% 100%;
+            background-repeat: no-repeat;
+            background-position: center center;
             opacity: 0.25; z-index: 1; filter: brightness(0.7);
         }
 
@@ -31,6 +36,12 @@
 
         #game-canvas {
             position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 10;
+        }
+
+        /* New layer specifically for animated GIFs */
+        #gif-layer {
+            position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 15;
+            pointer-events: none; /* Let all clicks pass through to the canvas */
         }
 
         .glass-panel {
@@ -63,12 +74,15 @@
     <div id="bg-container"></div>
     <video id="video-element" autoplay playsinline></video>
     <canvas id="game-canvas"></canvas>
+    
+    <!-- DOM Layer for GIF Animations -->
+    <div id="gif-layer"></div>
 
     <!-- Loading Screen -->
     <div id="loading-screen">
         <div class="spinner mb-6"></div>
         <h1 class="text-3xl font-extrabold tracking-widest text-cyan-400 mb-2 drop-shadow-lg">KS INTER HOUSE 2026</h1>
-        <p class="text-slate-300 text-sm tracking-wide" id="load-text">กำลังเตรียมระบบ 5 สัตว์ในตำนานแห่ง KS INTER HOUSE 2026... 0%</p>
+        <p class="text-slate-300 text-sm tracking-wide" id="load-text">กำลังเตรียมระบบ 5 สัตว์ในตำนาน... 0%</p>
         <p class="text-slate-500 text-xs mt-4">กรุณาอนุญาตการใช้งานกล้องเพื่อเริ่มเล่นเกม</p>
     </div>
 
@@ -98,20 +112,23 @@
     <script>
         const TOTAL_BEASTS = 5;
         const ASSET_URLS = {
-            beast1: 'https://lh3.googleusercontent.com/d/1t1L0HsGuzDpptbt0KLl0F1n3NZKHmHDp',
-            beast2: 'https://lh3.googleusercontent.com/d/19oDYhYolaE8nfEQEnPQblA_cBfCgr8Lh',
-            beast3: 'https://lh3.googleusercontent.com/d/17kEPVgGACbcv_ie_ISw653nR1cZE5y0l',
-            beast4: 'https://lh3.googleusercontent.com/d/14Mv6d7PzYSeI8qYykaCjJ1cqlG4WA7MP',
-            beast5: 'https://lh3.googleusercontent.com/d/1Fu-aw3UljVrmXB7JMhx7LnB1hSlaF_WW',
-            victoryImg: 'https://lh3.googleusercontent.com/d/1SfbKCxORYpMlq9P83hrwg1MHxtPwU0-i'
+            beast1: 'https://lh3.googleusercontent.com/d/1uOAjEDe2CcQtYu1DEMUkTenMs0rdS66G', // แก้ไข path หรือ URL ของ beast 1 ที่นี่
+            beast2: 'https://lh3.googleusercontent.com/d/1IaI0WUrUyHf13wPDNgFDbEJa9U1uJAKr', // แก้ไข path หรือ URL ของ beast 2 ที่นี่
+            beast3: 'https://lh3.googleusercontent.com/d/1KQ_zo0v8xVwwvtn88J1e8BRahHUzM4b7', // แก้ไข path หรือ URL ของ beast 3 ที่นี่
+            beast4: 'https://lh3.googleusercontent.com/d/1GXxuK1tYF6_m6gbilCz9OmzDcAOUhoiH', // แก้ไข path หรือ URL ของ beast 4 ที่นี่
+            beast5: 'https://lh3.googleusercontent.com/d/1VNcrPmmHpmrp_KimJxW3pktMFKJweUNP', // แก้ไข path หรือ URL ของ beast 5 ที่นี่
+            victoryImg: 'https://lh3.googleusercontent.com/d/15sLqO_PrKKu2LaT8q6izYAeW9ZW77ZKM'
         };
 
         const canvas = document.getElementById('game-canvas');
         const ctx = canvas.getContext('2d');
         const videoElement = document.getElementById('video-element');
+        const gifLayer = document.getElementById('gif-layer');
+        
         let vw = window.innerWidth;
         let vh = window.innerHeight;
-        let loadedImages = {};
+        
+        let domImages = {}; // Store the HTML <img> elements for GIFs
         let imagesLoaded = 0;
         
         let gameState = 'loading'; // loading, playing, victory
@@ -119,7 +136,7 @@
         let hands = null;
         let lastTime = 0;
 
-        let altars = []; // 5 altar slots
+        let altars = []; 
         let beasts = [];
         let particles = [];
         let score = 0;
@@ -151,16 +168,13 @@
             osc.start(); osc.stop(audioCtx.currentTime + 0.6);
         }
 
-        // Play loud triple explosion sound effect when 5 beasts are collected
         function playLoudTripleExplosion() {
             playChime(1.0);
             createExplosion(vw / 2, vh / 2, 80, ['#FFFFFF', '#FFD700', '#FF4500']);
-            
             setTimeout(() => {
                 playChime(1.2);
                 createExplosion(vw / 2 - 100, vh / 2 - 50, 80, ['#00FFFF', '#FF1493', '#FFA500']);
             }, 300);
-
             setTimeout(() => {
                 playChime(1.5);
                 createExplosion(vw / 2 + 100, vh / 2 + 50, 100, ['#32CD32', '#FF4500', '#FFFF00']);
@@ -176,11 +190,11 @@
             constructor(id, imgKey, initialX, initialY) {
                 this.id = id;
                 this.imgKey = imgKey;
-                // Increased size by 40% (1.4x factor)
+                
                 let baseSize = Math.min(vw, vh) * 0.14;
                 if(baseSize < 80) baseSize = 80;
                 if(baseSize > 125) baseSize = 125;
-                this.size = baseSize * 1.4; 
+                this.size = baseSize * 2.8; 
                 
                 this.x = initialX;
                 this.y = initialY;
@@ -201,35 +215,31 @@
                     this.x += (cursor.x - this.x) * 0.25;
                     this.y += (cursor.y - this.y) * 0.25;
                 } else {
-                    // Static in place (no automatic movement)
                     this.x = this.baseX;
                     this.y = this.baseY;
                 }
             }
 
-            draw(ctx, time = 0) {
-                if (!loadedImages[this.imgKey] || this.opacity <= 0) return;
+            // Syncs the underlying DOM <img> with the game coordinates
+            drawDOM(time = 0) {
+                const imgEl = domImages[this.imgKey];
+    if (!imgEl || this.opacity <= 0) return;
 
-                ctx.save();
-                ctx.translate(this.x, this.y);
-                
-                const zDepth = this.isDragged ? 1.25 : 1 + Math.sin(time * 0.003) * 0.05; 
-                
-                ctx.scale(this.scale * zDepth, this.scale * zDepth);
-                ctx.globalAlpha = this.opacity;
-                
-                ctx.shadowColor = 'rgba(0, 0, 0, 0.75)';
-                ctx.shadowBlur = 35 * zDepth;
-                ctx.shadowOffsetY = 18 * zDepth;
-                ctx.shadowOffsetX = 10 * zDepth;
-                
-                if (this.isDragged) {
-                    ctx.shadowColor = 'rgba(52, 211, 153, 0.95)';
-                    ctx.shadowBlur = 45;
+    imgEl.classList.remove('hidden');
+    
+    // กำหนดขนาดนิ่งๆ (ขยาย 1.25 เท่าเฉพาะตอนกำลังถูกลาก)
+    const currentScale = this.isDragged ? this.scale * 1.25 : this.scale;
+    
+    imgEl.style.width = `${this.size}px`;
+    imgEl.style.height = `${this.size}px`;
+    imgEl.style.transform = `translate(${this.x - this.size/2}px, ${this.y - this.size/2}px) scale(${currentScale})`;
+    imgEl.style.opacity = this.opacity;
+    
+    if (this.isDragged) {
+        imgEl.style.filter = 'drop-shadow(0px 15px 25px rgba(52, 211, 153, 0.95))';
+    } else {
+        imgEl.style.filter = 'drop-shadow(0px 10px 15px rgba(0, 0, 0, 0.75))';
                 }
-
-                ctx.drawImage(loadedImages[this.imgKey], -this.size/2, -this.size/2, this.size, this.size);
-                ctx.restore();
             }
 
             contains(x, y) {
@@ -250,32 +260,25 @@
                 this.size = Math.random() * 6 + 3;
             }
             update() {
-                this.x += this.vx;
-                this.y += this.vy;
-                this.vy += 0.12;
-                this.life -= this.decay;
+                this.x += this.vx; this.y += this.vy;
+                this.vy += 0.12; this.life -= this.decay;
             }
             draw(ctx) {
                 ctx.globalAlpha = Math.max(0, this.life);
                 ctx.fillStyle = this.color;
-                ctx.shadowColor = this.color;
-                ctx.shadowBlur = 12;
-                ctx.beginPath();
-                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.globalAlpha = 1;
+                ctx.shadowColor = this.color; ctx.shadowBlur = 12;
+                ctx.beginPath(); ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill(); ctx.globalAlpha = 1;
             }
         }
 
         function resizeCanvas() {
-            vw = window.innerWidth;
-            vh = window.innerHeight;
-            canvas.width = vw;
-            canvas.height = vh;
+            vw = window.innerWidth; vh = window.innerHeight;
+            canvas.width = vw; canvas.height = vh;
             
             altars = [];
             const totalSlots = 5;
-            const slotW = Math.min(85, vw * 0.16);
+            const slotW = Math.min(180, vw * 0.18);
             const slotH = slotW;
             const gap = 14;
             const totalWidth = (totalSlots * slotW) + ((totalSlots - 1) * gap);
@@ -284,13 +287,8 @@
 
             for(let i=0; i<totalSlots; i++) {
                 altars.push({
-                    id: i + 1,
-                    x: startX + i * (slotW + gap),
-                    y: startY,
-                    w: slotW,
-                    h: slotH,
-                    filled: false,
-                    beastKey: null
+                    id: i + 1, x: startX + i * (slotW + gap), y: startY, w: slotW, h: slotH,
+                    filled: false, beastKey: null
                 });
             }
         }
@@ -303,90 +301,60 @@
             }
         }
 
-        function removeImageBackground(img) {
-            const tempCanvas = document.createElement('canvas');
-            tempCanvas.width = img.width;
-            tempCanvas.height = img.height;
-            const tCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
-            tCtx.drawImage(img, 0, 0);
-            
-            try {
-                const imageData = tCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
-                const data = imageData.data;
-                if (data[3] === 0) return tempCanvas;
-
-                const bgR = data[0], bgG = data[1], bgB = data[2];
-                const tolerance = 50;
-
-                for (let i = 0; i < data.length; i += 4) {
-                    if (Math.abs(data[i] - bgR) < tolerance && 
-                        Math.abs(data[i+1] - bgG) < tolerance && 
-                        Math.abs(data[i+2] - bgB) < tolerance) {
-                        data[i+3] = 0; 
-                    }
-                }
-                tCtx.putImageData(imageData, 0, 0);
-                return tempCanvas;
-            } catch (e) {
-                console.warn("CORS background removal notice:", e);
-                return img;
-            }
-        }
-
         function preloadAssets() {
             const keys = Object.keys(ASSET_URLS);
             const loadText = document.getElementById('load-text');
             
             keys.forEach(key => {
-                const img = new Image();
-                img.crossOrigin = "anonymous";
-                img.onload = () => {
-                    loadedImages[key] = removeImageBackground(img);
+                // Instead of Canvas Image, create an actual DOM element for GIF support
+                const imgEl = document.createElement('img');
+                imgEl.src = ASSET_URLS[key];
+                imgEl.className = 'absolute top-0 left-0 origin-center hidden';
+                imgEl.style.transition = 'transform 0.05s ease-out, filter 0.2s';
+                
+                gifLayer.appendChild(imgEl);
+                domImages[key] = imgEl;
+
+                imgEl.onload = () => {
                     imagesLoaded++;
-                    loadText.innerText = `กำลังเตรียมระบบ 5 สัตว์ในตำนานแห่ง KS INTER HOUSE 2026... ${Math.floor((imagesLoaded/keys.length)*100)}%`;
-                    
-                    if (imagesLoaded === keys.length) {
-                        setTimeout(() => {
-                            const loadingScreen = document.getElementById('loading-screen');
-                            loadingScreen.style.opacity = '0';
-                            setTimeout(() => loadingScreen.style.display = 'none', 600);
-                            
-                            initGame();
-                            initMediaPipe();
-                            gameState = 'playing';
-                            requestAnimationFrame(drawLoop);
-                        }, 400);
-                    }
+                    loadText.innerText = `กำลังเตรียมระบบ 5 สัตว์ในตำนาน... ${Math.floor((imagesLoaded/keys.length)*100)}%`;
+                    checkAllLoaded(keys.length);
                 };
-                img.onerror = () => {
+                imgEl.onerror = () => {
                     console.error(`Asset load error: ${key}`);
                     imagesLoaded++;
+                    checkAllLoaded(keys.length);
                 };
-                img.src = ASSET_URLS[key];
             });
         }
 
+        function checkAllLoaded(total) {
+            if (imagesLoaded === total) {
+                setTimeout(() => {
+                    const loadingScreen = document.getElementById('loading-screen');
+                    loadingScreen.style.opacity = '0';
+                    setTimeout(() => loadingScreen.style.display = 'none', 600);
+                    
+                    initGame();
+                    initMediaPipe();
+                    gameState = 'playing';
+                    requestAnimationFrame(drawLoop);
+                }, 400);
+            }
+        }
+
         function initGame() {
-            beasts = [];
-            particles = [];
-            score = 0;
-            draggedBeast = null;
+            beasts = []; particles = []; score = 0; draggedBeast = null;
             victoryObj.active = false;
             
-            altars.forEach(slot => {
-                slot.filled = false;
-                slot.beastKey = null;
-            });
+            altars.forEach(slot => { slot.filled = false; slot.beastKey = null; });
 
-            // Arrange 5 beasts in a horizontal row across the center of the screen, static (no movement)
             const totalBeasts = TOTAL_BEASTS;
             const spacing = vw / (totalBeasts + 1);
             const centerY = vh * 0.42;
 
             for (let i = 1; i <= totalBeasts; i++) {
-                const initialX = spacing * i;
-                const initialY = centerY;
-                beasts.push(new Beast(i, `beast${i}`, initialX, initialY));
+                beasts.push(new Beast(i, `beast${i}`, spacing * i, centerY));
             }
         }
 
@@ -401,8 +369,7 @@
                         if (!slot.filled && 
                             cursor.x > slot.x && cursor.x < slot.x + slot.w &&
                             cursor.y > slot.y && cursor.y < slot.y + slot.h) {
-                            targetSlot = slot;
-                            break;
+                            targetSlot = slot; break;
                         }
                     }
 
@@ -417,8 +384,7 @@
                         score++;
                         
                         if(score >= TOTAL_BEASTS) {
-                            playLoudTripleExplosion();
-                            triggerVictory();
+                            playLoudTripleExplosion(); triggerVictory();
                         } else {
                             playChime(0.5);
                         }
@@ -435,9 +401,7 @@
                     if (!b.isCaptured && b.contains(cursor.x, cursor.y)) {
                         cursor.isHovering = true;
                         if (cursor.isPinching) {
-                            b.isDragged = true;
-                            draggedBeast = b;
-                            break;
+                            b.isDragged = true; draggedBeast = b; break;
                         }
                     }
                 }
@@ -447,10 +411,11 @@
         function triggerVictory() {
             gameState = 'victory';
             victoryObj.active = true;
-            victoryObj.y = vh / 2 - 40;
-            victoryObj.x = vw / 2;
-            victoryObj.scale = 0.1;
-            victoryObj.opacity = 0;
+            victoryObj.y = vh / 2 - 40; victoryObj.x = vw / 2;
+            victoryObj.scale = 0.1; victoryObj.opacity = 0;
+            
+            // Hide beasts when victory triggers
+            beasts.forEach(b => b.opacity = 0);
         }
 
         function initMediaPipe() {
@@ -459,10 +424,8 @@
             });
             
             hands.setOptions({
-                maxNumHands: 1,
-                modelComplexity: 1,
-                minDetectionConfidence: 0.65,
-                minTrackingConfidence: 0.65
+                maxNumHands: 1, modelComplexity: 1,
+                minDetectionConfidence: 0.65, minTrackingConfidence: 0.65
             });
 
             hands.onResults((results) => {
@@ -487,12 +450,10 @@
                     const pThumbY = thumbTip.y * vh;
                     const dx = cursor.x - pThumbX;
                     const dy = cursor.y - pThumbY;
-                    const dist = Math.sqrt(dx*dx + dy*dy);
-
-                    cursor.isPinching = dist < 45;
+                    
+                    cursor.isPinching = Math.sqrt(dx*dx + dy*dy) < 45;
                 } else {
-                    isHandDetected = false;
-                    latestHandLandmarks = null;
+                    isHandDetected = false; latestHandLandmarks = null;
                     if(!draggedBeast) cursor.isPinching = false;
                     
                     trackingDot.classList.replace('bg-emerald-500', 'bg-rose-500');
@@ -502,32 +463,23 @@
             });
 
             camera = new Camera(videoElement, {
-                onFrame: async () => {
-                    await hands.send({image: videoElement});
-                },
-                width: 640,
-                height: 480
+                onFrame: async () => { await hands.send({image: videoElement}); },
+                width: 640, height: 480
             });
-            camera.start().catch(err => {
-                console.warn("Camera start warning/fallback:", err);
-            });
+            camera.start().catch(err => console.warn("Camera fallback:", err));
         }
 
         function handlePointerMove(e) {
             if(isHandDetected) return;
-            let clientX = e.touches ? e.touches[0].clientX : e.clientX;
-            let clientY = e.touches ? e.touches[0].clientY : e.clientY;
-            cursor.x = clientX;
-            cursor.y = clientY;
+            cursor.x = e.touches ? e.touches[0].clientX : e.clientX;
+            cursor.y = e.touches ? e.touches[0].clientY : e.clientY;
         }
         function handlePointerDown(e) {
             if(isHandDetected) return;
-            handlePointerMove(e);
-            cursor.isPinching = true;
+            handlePointerMove(e); cursor.isPinching = true;
         }
         function handlePointerUp(e) {
-            if(isHandDetected) return;
-            cursor.isPinching = false;
+            if(isHandDetected) return; cursor.isPinching = false;
         }
 
         window.addEventListener('mousemove', handlePointerMove);
@@ -547,95 +499,46 @@
                 ctx.shadowColor = slot.filled ? 'rgba(52, 211, 153, 0.7)' : 'rgba(6, 182, 212, 0.6)';
                 ctx.shadowBlur = 20;
                 
-                ctx.beginPath();
-                ctx.roundRect(slot.x, slot.y, slot.w, slot.h, 18);
-                ctx.fill();
-                ctx.stroke();
+                ctx.beginPath(); ctx.roundRect(slot.x, slot.y, slot.w, slot.h, 18);
+                ctx.fill(); ctx.stroke();
 
-                if (slot.filled && slot.beastKey && loadedImages[slot.beastKey]) {
-                    const beastImg = loadedImages[slot.beastKey];
-                    const pad = 8;
-                    ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
-                    ctx.shadowBlur = 15;
-                    ctx.drawImage(beastImg, slot.x + pad, slot.y + pad, slot.w - (pad*2), slot.h - (pad*2));
-                } else {
-                    ctx.fillStyle = '#93C5FD';
-                    ctx.shadowBlur = 4;
-                    ctx.shadowColor = 'rgba(0,0,0,0.8)';
-                    ctx.font = 'bold 18px Inter';
-                    ctx.textAlign = 'center';
-                    ctx.textBaseline = 'middle';
+                if (!slot.filled) {
+                    ctx.fillStyle = '#93C5FD'; ctx.shadowBlur = 4; ctx.shadowColor = 'rgba(0,0,0,0.8)';
+                    ctx.font = 'bold 18px Inter'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
                     ctx.fillText(`${slot.id}`, slot.x + slot.w/2, slot.y + slot.h/2);
                 }
                 ctx.restore();
             });
 
-            // Banner above altars
             ctx.save();
-            ctx.font = 'bold 16px Inter';
-            ctx.fillStyle = '#FFFFFF';
-            ctx.textAlign = 'center';
-            ctx.shadowColor = 'rgba(0,0,0,0.9)';
-            ctx.shadowBlur = 6;
+            ctx.font = 'bold 16px Inter'; ctx.fillStyle = '#FFFFFF';
+            ctx.textAlign = 'center'; ctx.shadowColor = 'rgba(0,0,0,0.9)'; ctx.shadowBlur = 6;
             ctx.fillText(`✨ 5 สัตว์ในตำนานแห่ง KS INTER HOUSE 2026 (${score}/${TOTAL_BEASTS}) ✨`, vw / 2, altars[0].y - 18);
             ctx.restore();
         }
 
         function drawCursor(time) {
-            ctx.save();
-            ctx.lineWidth = 3;
-            
+            ctx.save(); ctx.lineWidth = 3;
             if (draggedBeast) {
-                ctx.strokeStyle = '#22C55E';
-                ctx.fillStyle = 'rgba(34, 197, 94, 0.25)';
-                ctx.shadowColor = '#22C55E';
-                ctx.shadowBlur = 18;
+                ctx.strokeStyle = '#22C55E'; ctx.fillStyle = 'rgba(34, 197, 94, 0.25)';
+                ctx.shadowColor = '#22C55E'; ctx.shadowBlur = 18;
                 ctx.beginPath(); ctx.arc(cursor.x, cursor.y, 28, 0, Math.PI*2);
                 ctx.fill(); ctx.stroke();
                 
                 ctx.fillStyle = '#fff'; ctx.font = '18px Arial'; ctx.textAlign='center'; ctx.textBaseline='middle';
                 ctx.fillText('🎯', cursor.x, cursor.y);
             } else if (cursor.isHovering) {
-                ctx.strokeStyle = '#F59E0B';
-                ctx.setLineDash([6, 6]);
-                const pulse = 26 + Math.sin(time * 0.012) * 6;
-                ctx.beginPath(); ctx.arc(cursor.x, cursor.y, pulse, 0, Math.PI*2);
+                ctx.strokeStyle = '#F59E0B'; ctx.setLineDash([6, 6]);
+                ctx.beginPath(); ctx.arc(cursor.x, cursor.y, 26 + Math.sin(time * 0.012) * 6, 0, Math.PI*2);
                 ctx.stroke();
             } else if (cursor.isPinching) {
-                ctx.strokeStyle = '#EF4444';
-                ctx.fillStyle = 'rgba(239, 68, 68, 0.3)';
+                ctx.strokeStyle = '#EF4444'; ctx.fillStyle = 'rgba(239, 68, 68, 0.3)';
                 ctx.beginPath(); ctx.arc(cursor.x, cursor.y, 22, 0, Math.PI*2);
                 ctx.fill(); ctx.stroke();
             } else {
-                ctx.strokeStyle = '#06B6D4';
-                ctx.fillStyle = 'rgba(6, 182, 212, 0.15)';
+                ctx.strokeStyle = '#06B6D4'; ctx.fillStyle = 'rgba(6, 182, 212, 0.15)';
                 ctx.beginPath(); ctx.arc(cursor.x, cursor.y, 16, 0, Math.PI*2);
                 ctx.fill(); ctx.stroke();
-            }
-            ctx.restore();
-        }
-
-        function drawHandLandmarks() {
-            if (!isHandDetected || !latestHandLandmarks) return;
-            ctx.save();
-            const connections = HAND_CONNECTIONS;
-            ctx.strokeStyle = 'rgba(6, 182, 212, 0.45)';
-            ctx.lineWidth = 2.5;
-            for (let i = 0; i < connections.length; i++) {
-                const [p1, p2] = connections[i];
-                const pt1 = latestHandLandmarks[p1];
-                const pt2 = latestHandLandmarks[p2];
-                ctx.beginPath();
-                ctx.moveTo((1 - pt1.x) * vw, pt1.y * vh);
-                ctx.lineTo((1 - pt2.x) * vw, pt2.y * vh);
-                ctx.stroke();
-            }
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
-            for (let i = 0; i < latestHandLandmarks.length; i++) {
-                const pt = latestHandLandmarks[i];
-                ctx.beginPath();
-                ctx.arc((1 - pt.x) * vw, pt.y * vh, 3.5, 0, 2 * Math.PI);
-                ctx.fill();
             }
             ctx.restore();
         }
@@ -649,42 +552,43 @@
 
             if (gameState === 'playing' || gameState === 'victory') {
                 checkInteractions();
-                
                 drawAltars(timestamp);
 
+                // Update physical coordinates and DOM Overlay for GIFs
                 beasts.forEach(b => {
                     b.update(dt, timestamp);
-                    b.draw(ctx, timestamp);
+                    b.drawDOM(timestamp);
                 });
 
-                if (victoryObj.active && loadedImages.victoryImg) {
+                // Handle Victory GIF animation
+                const vImg = domImages['victoryImg'];
+                if (victoryObj.active && vImg) {
+                    vImg.classList.remove('hidden');
                     victoryObj.y += (victoryObj.targetY - victoryObj.y) * 0.03;
-                    victoryObj.scale += (victoryObj.maxScale - victoryObj.scale) * 0.03;
+                   victoryObj.scale += (victoryObj.maxScale - victoryObj.scale) * 0.03;
                     if (victoryObj.opacity < 1) victoryObj.opacity += 0.02;
                     
-                    ctx.save();
-                    ctx.translate(victoryObj.x, victoryObj.y + Math.sin(timestamp*0.0035)*22);
-                    ctx.globalAlpha = victoryObj.opacity;
-                    ctx.scale(victoryObj.scale, victoryObj.scale);
-                    ctx.shadowColor = 'rgba(245, 158, 11, 0.95)';
-                    ctx.shadowBlur = 70;
-                    ctx.shadowOffsetY = 20;
-                    ctx.drawImage(loadedImages.victoryImg, -140, -140, 280, 280);
-                    ctx.restore();
+                    const vSize = 280;
+                    vImg.style.width = `${vSize}px`;
+                    vImg.style.height = `${vSize}px`;
+                    const bounceY = Math.sin(timestamp * 0.0035) * 22;
+                    vImg.style.transform = `translate(${victoryObj.x - vSize/2}px, ${victoryObj.y + bounceY - vSize/2}px) scale(${victoryObj.scale})`;
+                    vImg.style.opacity = victoryObj.opacity;
+                    vImg.style.filter = 'drop-shadow(0px 20px 35px rgba(245, 158, 11, 0.8))';
                     
                     if(Math.random() < 0.15) {
                         createExplosion(Math.random()*vw, Math.random()*(vh*0.7), 25, ['#10B981', '#EF4444', '#F59E0B', '#3B82F6', '#EC4899', '#FFFFFF']);
                     }
+                } else if (vImg) {
+                    vImg.classList.add('hidden');
                 }
 
+                // Draw Particle Explosions on Canvas
                 for (let i = particles.length - 1; i >= 0; i--) {
-                    let p = particles[i];
-                    p.update();
-                    p.draw(ctx);
+                    let p = particles[i]; p.update(); p.draw(ctx);
                     if (p.life <= 0) particles.splice(i, 1);
                 }
 
-                if (isHandDetected) drawHandLandmarks();
                 if (cursor.x > -50 && cursor.y > -50) drawCursor(timestamp);
             }
 
