@@ -52,22 +52,71 @@
             box-shadow: 0 10px 30px 0 rgba(0, 0, 0, 0.5);
         }
 
+        /* สไตล์หน้า Loading พื้นหลังผ้าขาว */
         #loading-screen {
-            position: absolute; top: 0; left: 0; width: 100vw; height: 100vh;
-            background: radial-gradient(circle at center, #0f172a 0%, #020617 100%);
-            z-index: 50; display: flex; flex-direction: column;
-            justify-content: center; align-items: center; color: white;
-            transition: opacity 0.6s ease;
+    position: absolute; top: 0; left: 0; width: 100vw; height: 100vh;
+    background-color: #ffffff; /* เปลี่ยนเป็นสีขาวเรียบ */
+    z-index: 50; display: flex; flex-direction: column;
+    justify-content: center; align-items: center; 
+    color: #1e293b; /* เปลี่ยนสีข้อความพื้นฐานเป็นสีเทาเข้ม */
+    transition: opacity 0.6s ease;
+}
+
+        /* สไตล์สำหรับโลโก้หน้า Loading */
+        .logo-loader-wrapper {
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
         }
 
-        .spinner {
-            width: 60px; height: 60px;
-            border: 6px solid rgba(255,255,255,0.1);
-            border-radius: 50%;
-            border-top-color: #06b6d4;
-            animation: spin 1s cubic-bezier(0.68, -0.55, 0.27, 1.55) infinite;
+        /* เอฟเฟกต์ย่อขยายจังหวะหัวใจ + เปล่งแสงเรืองรองโทนเขียวอ่อน */
+        .logo-pulse {
+            animation: logoPulse 1.8s ease-in-out infinite;
         }
-        @keyframes spin { to { transform: rotate(360deg); } }
+
+        @keyframes logoPulse {
+            0% {
+                transform: scale(0.96);
+                filter: drop-shadow(0 0 10px rgba(132, 204, 22, 0.4));
+            }
+            50% {
+                transform: scale(1.05);
+                filter: drop-shadow(0 0 25px rgba(132, 204, 22, 0.85));
+            }
+            100% {
+                transform: scale(0.96);
+                filter: drop-shadow(0 0 10px rgba(132, 204, 22, 0.4));
+            }
+        }
+
+        /* สไตล์สำหรับโลโก้หน้า Loading */
+        .logo-loader-wrapper {
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        /* เอฟเฟกต์ย่อขยายจังหวะหัวใจ + เปล่งแสงเรืองรองโทนเขียวอ่อน */
+        .logo-pulse {
+            animation: logoPulse 1.8s ease-in-out infinite;
+        }
+
+        @keyframes logoPulse {
+            0% {
+                transform: scale(0.96);
+                filter: drop-shadow(0 0 10px rgba(132, 204, 22, 0.4));
+            }
+            50% {
+                transform: scale(1.05);
+                filter: drop-shadow(0 0 25px rgba(132, 204, 22, 0.85));
+            }
+            100% {
+                transform: scale(0.96);
+                filter: drop-shadow(0 0 10px rgba(132, 204, 22, 0.4));
+            }
+        }
     </style>
 </head>
 <body>
@@ -79,10 +128,17 @@
     <div id="gif-layer"></div>
 
     <!-- Loading Screen -->
+    <!-- Loading Screen แบบใช้โลโก้ 72 ปี -->
+    <!-- Loading Screen -->
+    <!-- Loading Screen -->
+    <!-- Loading Screen แบบใช้โลโก้ 72 ปี -->
     <div id="loading-screen">
-        <div class="spinner mb-6"></div>
-        <h1 class="text-3xl font-extrabold tracking-widest text-cyan-400 mb-2 drop-shadow-lg">KS INTER HOUSE 2026</h1>
-        <p class="text-slate-300 text-sm tracking-wide" id="load-text">กำลังเตรียมระบบ 5 สัตว์ในตำนาน... 0%</p>
+        <!-- โลโก้ 72 ปี พร้อมเอฟเฟกต์ย่อขยาย+เปล่งแสงนุ่มนวล -->
+        <div class="logo-loader-wrapper mb-6">
+            <img src="https://lh3.googleusercontent.com/d/1LGwyhSfllv05hYqQyr86Z7PFCO1g2AaJ" alt="72th Anniversary Logo" class="logo-pulse w-44 h-auto drop-shadow-xl">
+        </div>
+        <h1 class="text-3xl font-extrabold tracking-widest bg-gradient-to-r from-[#0d3b1e] via-[#166534] to-[#4ade80] bg-clip-text text-transparent mb-2 drop-shadow-lg">KS INTER HOUSE 2026</h1>
+        <p class="text-[#0e4d25] text-sm tracking-wide font-bold" id="load-text">กำลังเตรียมระบบ 5 สัตว์ในตำนาน... 0%</p>
         <p class="text-slate-500 text-xs mt-4">กรุณาอนุญาตการใช้งานกล้องเพื่อเริ่มเล่นเกม</p>
     </div>
 
