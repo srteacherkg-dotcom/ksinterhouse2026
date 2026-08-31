@@ -25,7 +25,7 @@
             background-size: 100% 100%;
             background-repeat: no-repeat;
             background-position: center center;
-            opacity: 0.25; z-index: 1; filter: brightness(0.7);
+            opacity: 0.8; z-index: 1; filter: brightness(0.8);
         }
 
         #video-element {
@@ -624,7 +624,7 @@
                    victoryObj.scale += (victoryObj.maxScale - victoryObj.scale) * 0.03;
                     if (victoryObj.opacity < 1) victoryObj.opacity += 0.02;
                     
-                    const vSize = 280;
+                    const vSize = 500;
                     vImg.style.width = `${vSize}px`;
                     vImg.style.height = `${vSize}px`;
                     const bounceY = Math.sin(timestamp * 0.0035) * 22;
